@@ -46,9 +46,45 @@ function Get-MockInstanceState {
 }
 
 function Get-LogFromS3 {
-    # TODO: Simulate S3 download of zipped IIS log and extract
-}
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$InstanceId,
 
+        [Parameter(Mandatory)]
+        [string]$LogFileName
+    )
+
+    $tempDir = Join-Path $env:TEMP "EC2Diagnostics_$InstanceId"
+    $zipPath = Join-Path $tempDir "$LogFileName.zip"
+    $extractPath = Join-Path $tempDir "Extracted"
+
+    # Clean up any previous run
+    if (Test-Path $tempDir) {
+        Remove-Item $tempDir -Recurse -Force
+    }
+    New-Item -Path $extractPath -ItemType Directory -Force | Out-Null
+
+    # Locate the log file relative to the script
+    $sourceLog = Join-Path $PSScriptRoot $LogFileName
+    if (-not (Test-Path $sourceLog)) {
+        throw "Log file not found: '$sourceLog'."
+    }
+
+    Write-Verbose "Simulating S3 download of $LogFileName.zip to $tempDir..."
+
+    # Simulate the S3 download by zipping and extracting the local log file
+    Compress-Archive -Path $sourceLog -DestinationPath $zipPath -Force
+    Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
+    $extractedFile = Get-ChildItem -Path $extractPath -File | Select-Object -First 1
+    if (-not $extractedFile) {
+        throw "Zip extraction produced no files."
+    }
+
+    Write-Verbose "Log extracted to $($extractedFile.FullName)"
+    $extractedFile.FullName
+}
 function Read-IISLog {
     # TODO: Parse W3C log format, skip comments, filter HTTP 500 entries
 }
@@ -64,8 +100,13 @@ function Write-DiagnosticReport {
 # 1. Validate input and query instance state
 $instanceState = Get-MockInstanceState -InstanceId $InstanceId
 Write-Verbose "Instance $InstanceId is $($instanceState.State)"
+
 # 2. Retrieve log file from S3
+$logPath = Get-LogFromS3 -InstanceId $InstanceId -LogFileName 'mockIISLog.txt'
+Write-Verbose "Log file ready at $logPath"
+
 # 3. Parse log and filter for errors
+
 # 4. Generate diagnostic report
 
 #endregion
