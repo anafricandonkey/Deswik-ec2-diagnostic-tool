@@ -99,6 +99,12 @@ function Read-IISLog {
     }
 
     $lines = Get-Content -Path $LogPath
+
+    if ($lines.Count -eq 0) {
+        Write-Warning "Log file is empty: '$LogPath'"
+        return @()
+    }
+
     $results = @()
     $malformedCount = 0
 
@@ -138,7 +144,41 @@ function Read-IISLog {
 }
 
 function Write-DiagnosticReport {
-    # TODO: Output formatted summary to console
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [PSCustomObject]$InstanceState,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [array]$Errors
+    )
+
+    Write-Host "`n===== EC2 Diagnostic Report =====" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Instance ID:       $($InstanceState.InstanceId)"
+    Write-Host "State:             $($InstanceState.State)"
+    Write-Host "Instance Type:     $($InstanceState.InstanceType)"
+    Write-Host "Availability Zone: $($InstanceState.AvailabilityZone)"
+    Write-Host "Launch Time:       $($InstanceState.LaunchTime)"
+    Write-Host "Private IP:        $($InstanceState.PrivateIpAddress)"
+    Write-Host ""
+    Write-Host "----- HTTP 500 Error Summary -----" -ForegroundColor Yellow
+    Write-Host "Total 500 Errors:  $($Errors.Count)"
+    Write-Host ""
+
+    if ($Errors.Count -eq 0) {
+        Write-Host "No HTTP 500 errors found." -ForegroundColor Green
+    }
+    else {
+        Write-Host "Timestamp            Method  URI                          Time Taken"
+        Write-Host "---------            ------  ---                          ----------"
+        foreach ($err in $Errors) {
+            Write-Host ("{0}  {1,-6} {2,-28} {3}" -f $err.Timestamp, $err.Method, $err.UriStem, $err.TimeTaken)
+        }
+    }
+
+    Write-Host "`n=================================" -ForegroundColor Cyan
 }
 
 #endregion
@@ -158,5 +198,6 @@ $errors = Read-IISLog -LogPath $logPath
 Write-Verbose "Found $($errors.Count) HTTP 500 entries"
 
 # 4. Generate diagnostic report
+Write-DiagnosticReport -InstanceState $instanceState -Errors $errors
 
 #endregion
