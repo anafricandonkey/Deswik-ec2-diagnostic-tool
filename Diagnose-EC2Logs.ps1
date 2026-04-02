@@ -11,7 +11,7 @@
     EC2 Instance ID to investigate (e.g., i-0a1b2c3d4e5f67890).
 
 .EXAMPLE
-    .\Diagnose-EC2Logs.ps1 -InstanceId "i-0a1b2c3d4e5f67890""
+    .\Diagnose-EC2Logs.ps1 -InstanceId "i-0a1b2c3d4e5f67890"
 #>
 [CmdletBinding()]
 param (
@@ -185,19 +185,24 @@ function Write-DiagnosticReport {
 
 #region --- Main ---
 
-# 1. Validate input and query instance state
-$instanceState = Get-MockInstanceState -InstanceId $InstanceId
-Write-Verbose "Instance $InstanceId is $($instanceState.State)"
+try {
+    # 1. Validate input and query instance state
+    $instanceState = Get-MockInstanceState -InstanceId $InstanceId
+    Write-Verbose "Instance $InstanceId is $($instanceState.State)"
 
-# 2. Retrieve log file from S3
-$logPath = Get-LogFromS3 -InstanceId $InstanceId -LogFileName 'mockIISLog.txt'
-Write-Verbose "Log file ready at $logPath"
+    # 2. Retrieve log file from S3
+    $logPath = Get-LogFromS3 -InstanceId $InstanceId -LogFileName 'mockIISLog.txt'
+    Write-Verbose "Log file ready at $logPath"
 
-# 3. Parse log and filter for errors
-$errors = Read-IISLog -LogPath $logPath
-Write-Verbose "Found $($errors.Count) HTTP 500 entries"
+    # 3. Parse log and filter for errors
+    $errors = Read-IISLog -LogPath $logPath
+    Write-Verbose "Found $($errors.Count) HTTP 500 entries"
 
-# 4. Generate diagnostic report
-Write-DiagnosticReport -InstanceState $instanceState -Errors $errors
-
+    # 4. Generate diagnostic report
+    Write-DiagnosticReport -InstanceState $instanceState -Errors $errors
+}
+catch {
+    Write-Error "EC2 Diagnostic Tool failed: $_"
+    exit 1
+}
 #endregion
