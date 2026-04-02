@@ -86,7 +86,55 @@ function Get-LogFromS3 {
     $extractedFile.FullName
 }
 function Read-IISLog {
-    # TODO: Parse W3C log format, skip comments, filter HTTP 500 entries
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$LogPath,
+
+        [int]$ErrorCode = 500
+    )
+
+    if (-not (Test-Path $LogPath)) {
+        throw "Log file not found: '$LogPath'."
+    }
+
+    $lines = Get-Content -Path $LogPath
+    $results = @()
+    $malformedCount = 0
+
+    foreach ($line in $lines) {
+        # Skip blank lines and W3C comment/header lines
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith('#')) {
+            continue
+        }
+
+        $fields = $line -split '\s+'
+
+        # W3C format expects 14 fields per the #Fields header
+        if ($fields.Count -ne 14) {
+            $malformedCount++
+            Write-Warning "Skipping malformed log entry (expected 14 fields, got $($fields.Count)): $line"
+            continue
+        }
+
+        $statusCode = $fields[10]
+
+        if ($statusCode -eq $ErrorCode) {
+            $results += [PSCustomObject]@{
+                Timestamp  = "$($fields[0]) $($fields[1])"
+                Method     = $fields[3]
+                UriStem    = $fields[4]
+                StatusCode = [int]$statusCode
+                TimeTaken  = "$($fields[13])ms"
+            }
+        }
+    }
+
+    if ($malformedCount -gt 0) {
+        Write-Warning "Total malformed lines skipped: $malformedCount"
+    }
+
+    $results
 }
 
 function Write-DiagnosticReport {
@@ -106,6 +154,8 @@ $logPath = Get-LogFromS3 -InstanceId $InstanceId -LogFileName 'mockIISLog.txt'
 Write-Verbose "Log file ready at $logPath"
 
 # 3. Parse log and filter for errors
+$errors = Read-IISLog -LogPath $logPath
+Write-Verbose "Found $($errors.Count) HTTP 500 entries"
 
 # 4. Generate diagnostic report
 
