@@ -205,4 +205,12 @@ catch {
     Write-Error "EC2 Diagnostic Tool failed: $_"
     exit 1
 }
+finally {
+    # Clean up temp files
+    $tempDir = Join-Path $env:TEMP "EC2Diagnostics_$InstanceId"
+    if (Test-Path $tempDir) {
+        Remove-Item $tempDir -Recurse -Force
+        Write-Verbose "Cleaned up temp directory: $tempDir"
+    }
+}
 #endregion
